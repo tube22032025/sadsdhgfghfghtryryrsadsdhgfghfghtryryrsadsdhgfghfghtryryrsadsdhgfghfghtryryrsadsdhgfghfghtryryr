@@ -1,11 +1,11 @@
 #!/bin/bash
 
 # ==============================================================================
-# CẤU HÌNH (LINK GOOGLE APPS SCRIPT MỚI NHẤT CỦA BẠN)
+# CẤU HÌNH (LINK MỚI NHẤT CỦA BẠN)
 # ==============================================================================
-GOOGLE_SCRIPT_URL="https://script.google.com/macros/s/AKfycbzALEzeEDtabgteD498NxTVrJcXPHJBWUgDAL4BUp5Iz_3VCnMMme28RSMpR8LSf-ne/exec"
+GOOGLE_SCRIPT_URL="https://script.google.com/macros/s/AKfycby1yDT132yHrUK-w6cyTgCR8tc5p3DAC1I4JT11vzDOoZ_AiePBvAiuSzUqqpUVK_Z2/exec"
 
-# Thông tin Panel
+# Thông tin Panel cố định
 PANEL_USER="honglee"
 PANEL_PASS="Abc369852@spo@VIP2024@VPN"
 PANEL_PORT=3712
@@ -40,7 +40,7 @@ log_info "Đang chạy script Setup SSH..."
 bash <(curl -fsSL https://raw.githubusercontent.com/Betty-Matthews/-setup_ssh/refs/heads/main/setup_ssh_ubuntu.sh) || log_warn "Setup SSH hoàn tất."
 
 # ==============================================================================
-# 3. CÀI ĐẶT 3X-UI (CÓ THỬ LẠI NẾU MẠNG LỖI)
+# 3. CÀI ĐẶT 3X-UI (CƠ CHẾ THỬ LẠI KHI GITHUB LỖI)
 # ==============================================================================
 XUI_BIN="/usr/local/x-ui/x-ui"
 install_xui() { echo -e "n\n" | bash <(curl -Ls https://raw.githubusercontent.com/mhsanaei/3x-ui/master/install.sh); }
@@ -61,7 +61,7 @@ else
 fi
 
 # ==============================================================================
-# 4. CẤU HÌNH 3X-UI
+# 4. CẤU HÌNH 3X-UI (FIX LỖI CASE SENSITIVE)
 # ==============================================================================
 log_info "Đang áp dụng cấu hình (User: honglee / Port: 3712)..."
 RANDOM_PATH=$(tr -dc A-Za-z0-9 </dev/urandom | head -c 16)
@@ -74,10 +74,8 @@ if [ -f "$XUI_BIN" ]; then
     $XUI_BIN restart > /dev/null 2>&1
     log_info "3x-ui đã khởi động thành công."
     
-    # Mở port trên firewall Ubuntu (nếu có cài ufw)
-    if command -v ufw >/dev/null 2>&1; then
-        ufw allow $PANEL_PORT >/dev/null 2>&1
-    fi
+    # Mở port firewall (nếu có)
+    if command -v ufw >/dev/null 2>&1; then ufw allow $PANEL_PORT >/dev/null 2>&1; fi
 else
     log_error "Lỗi: Không cài đặt được 3x-ui."
     exit 1
@@ -107,12 +105,13 @@ JSON_DATA=$(cat <<EOF
 EOF
 )
 
-log_info "Đang đồng bộ..."
+log_info "Đang đồng bộ dữ liệu..."
+# Gửi request lên Google Apps Script
 curl -s -L -X POST -H "Content-Type: application/json" -d "$JSON_DATA" "$GOOGLE_SCRIPT_URL" > /dev/null
-log_info "Đã gửi dữ liệu (Kết quả xem trên Sheet)."
+log_info "Đã gửi dữ liệu thành công."
 
 # ==============================================================================
-# 6. DỌN DẸP FILE RÁC (GIỮ LẠI PANEL)
+# 6. DỌN DẸP FILE RÁC (GIỮ LẠI PANEL ĐỂ DÙNG)
 # ==============================================================================
 echo "------------------------------------------------"
 echo "IP Public:   $HOST_IP"
@@ -122,20 +121,20 @@ echo "Port:        $PANEL_PORT"
 echo "Access URL:  $ACCESS_URL"
 echo "------------------------------------------------"
 
-log_warn "Đang dọn dẹp file rác..."
+log_warn "Đang dọn dẹp các file rác..."
 
-# 1. Xóa thư mục backup của script SSH tạo ra
+# Xóa thư mục backup SSH cứng đầu
 rm -rf /root/ssh_backups
 rm -rf ~/ssh_backups
 
-# 2. Xóa script cài đặt SSH tải về
+# Xóa script cài đặt SSH
 rm -f setup_ssh_ubuntu.sh
 
-# 3. Xóa lịch sử lệnh bash
+# Xóa lịch sử lệnh
 history -c
 history -w
 
-# 4. Tự xóa chính file script này (nhưng KHÔNG xóa 3x-ui)
+# Tự xóa chính file script này (nhưng 3x-ui vẫn chạy)
 if [[ -f "$0" ]]; then rm -f "$0"; fi
 
-log_info "HOÀN TẤT. 3X-UI VẪN ĐANG CHẠY. BẠN CÓ THỂ TRUY CẬP WEB."
+log_info "HOÀN TẤT. BẠN CÓ THỂ TRUY CẬP WEB NGAY."
