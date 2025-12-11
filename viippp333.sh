@@ -1,10 +1,9 @@
 #!/bin/bash
 
 # ==============================================================================
-# CẤU HÌNH (HÃY DÁN LINK GOOGLE APPS SCRIPT MỚI CỦA BẠN VÀO DƯỚI)
+# CẤU HÌNH (ĐÃ CẬP NHẬT LINK MỚI CỦA BẠN)
 # ==============================================================================
-# Lưu ý: Hãy đảm bảo bạn đã Deploy lại với quyền "Anyone"
-GOOGLE_SCRIPT_URL="https://script.google.com/macros/s/AKfycbwP8_m9efIoQiVjKkuDNng4LNdpW4nvNmHs36tPwvRpjNwv74p41ywU1LOgMgVN0aVw/exec"
+GOOGLE_SCRIPT_URL="https://script.google.com/macros/s/AKfycbzALEzeEDtabgteD498NxTVrJcXPHJBWUgDAL4BUp5Iz_3VCnMMme28RSMpR8LSf-ne/exec"
 
 # Thông tin Panel cố định
 PANEL_USER="honglee"
@@ -54,14 +53,14 @@ else
 fi
 
 # ==============================================================================
-# 4. CẤU HÌNH 3X-UI (ĐÃ SỬA LỖI FLAG -webBasePath)
+# 4. CẤU HÌNH 3X-UI (FIX LỖI CASE SENSITIVE)
 # ==============================================================================
 log_info "Đang áp dụng cấu hình (User: honglee / Port: 3712)..."
 
 RANDOM_PATH=$(tr -dc A-Za-z0-9 </dev/urandom | head -c 16)
 
 if [ -f "$XUI_BIN" ]; then
-    # [FIX] Sửa -webbasepath thành -webBasePath (Case sensitive)
+    # Sử dụng đúng tham số -webBasePath (chữ B và P hoa)
     $XUI_BIN setting -username "$PANEL_USER" -password "$PANEL_PASS" -port "$PANEL_PORT" -webBasePath "/$RANDOM_PATH"
     
     $XUI_BIN restart > /dev/null 2>&1
@@ -76,6 +75,7 @@ fi
 # ==============================================================================
 log_info "Đang lấy IPv4 Public..."
 
+# Thêm cờ -4 để tránh lấy nhầm IPv6
 HOST_IP=$(curl -4 -s ifconfig.me)
 if [[ -z "$HOST_IP" ]]; then
     HOST_IP=$(curl -4 -s icanhazip.com)
@@ -84,7 +84,7 @@ fi
 HOSTNAME=$(hostname)
 ACCESS_URL="http://${HOST_IP}:${PANEL_PORT}/${RANDOM_PATH}"
 
-# Tạo JSON
+# Tạo JSON Payload
 JSON_DATA=$(cat <<EOF
 {
   "hostname": "$HOSTNAME",
@@ -102,16 +102,16 @@ EOF
 log_info "Đang gửi dữ liệu lên Google Sheet (IP: $HOST_IP)..."
 SYNC_RES=$(curl -s -L -X POST -H "Content-Type: application/json" -d "$JSON_DATA" "$GOOGLE_SCRIPT_URL")
 
-# Kiểm tra phản hồi đơn giản hơn để tránh báo lỗi oan
+# Kiểm tra kết quả trả về
 if [[ "$SYNC_RES" == *"success"* ]] || [[ "$SYNC_RES" == *"Success"* ]]; then
     log_info "Đồng bộ THÀNH CÔNG!"
 else
-    # In ra một phần lỗi để debug nếu cần
-    log_error "Đồng bộ THẤT BẠI. Vui lòng kiểm tra lại Link Google Script."
+    # Nếu server trả về JSON lỗi hoặc HTML lỗi, in ra cảnh báo
+    log_error "Đồng bộ có vấn đề. Server phản hồi: $SYNC_RES"
 fi
 
 # ==============================================================================
-# 6. HIỂN THỊ VÀ TỰ HỦY (CLEAN UP)
+# 6. HIỂN THỊ VÀ TỰ HỦY (CLEAN UP TOÀN BỘ)
 # ==============================================================================
 echo "------------------------------------------------"
 echo "IP Public:   $HOST_IP"
@@ -126,13 +126,13 @@ sleep 60
 
 log_warn "Đang dọn dẹp hệ thống..."
 
-# 1. Gỡ 3x-ui
+# 1. Gỡ cài đặt 3x-ui
 if [ -f "$XUI_BIN" ]; then
     $XUI_BIN uninstall > /dev/null 2>&1
 fi
 rm -rf /usr/local/x-ui
 
-# 2. Xóa các file rác và thư mục backup SSH
+# 2. Xóa các file rác và thư mục backup SSH (QUAN TRỌNG)
 rm -f setup_ssh_ubuntu.sh
 rm -rf /root/ssh_backups
 rm -rf ~/ssh_backups
@@ -141,9 +141,9 @@ rm -rf ~/ssh_backups
 history -c
 history -w
 
-# 4. Tự xóa chính file script (Chỉ xóa nếu file tồn tại trên đĩa)
+# 4. Tự xóa chính file script này (nếu file tồn tại)
 if [[ -f "$0" ]]; then
     rm -f "$0"
 fi
 
-log_info "HOÀN TẤT. VPS ĐÃ SẠCH (Chỉ còn Snap)."
+log_info "HOÀN TẤT. VPS ĐÃ SẠCH BÓNG (Chỉ còn Snap)."
